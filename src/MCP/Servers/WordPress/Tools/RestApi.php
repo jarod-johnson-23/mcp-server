@@ -34,7 +34,7 @@ readonly class RestApi {
 	 *
 	 * @return array<int, ToolDefinition> Tools.
 	 */
-	public function get_tools(): array {
+    public function get_tools( array $opts = [] ): array {
 		$server     = rest_get_server();
 		$routes     = $server->get_routes();
 		$namespaces = $server->get_namespaces();
@@ -44,6 +44,19 @@ readonly class RestApi {
 			// Do not include namespace routes in the response.
 			if ( in_array( ltrim( $route, '/' ), $namespaces, true ) ) {
 				continue;
+			}
+
+			// Optional allowlist of namespaces: only include routes whose namespace is in the allowlist.
+			if ( isset( $opts['namespaces'] ) && is_array( $opts['namespaces'] ) && ! empty( $opts['namespaces'] ) ) {
+				$trimmed = ltrim( $route, '/' );
+				$parts   = explode( '/', $trimmed, 3 );
+				$ns_part = $parts[0] ?? '';
+				$ver_part = $parts[1] ?? '';
+				$route_namespace = '' !== $ver_part ? $ns_part . '/' . $ver_part : $ns_part;
+
+				if ( ! in_array( $route_namespace, $opts['namespaces'], true ) ) {
+					continue;
+				}
 			}
 
 			/**
@@ -234,13 +247,38 @@ readonly class RestApi {
 		}
 
 		foreach ( $args as $title => $arg ) {
+			if ( ! is_array( $arg ) ) {
+				$schema[ $title ] = [ 'type' => 'string' ];
+				continue;
+			}
+
 			$description = $arg['description'] ?? $title;
 			$type        = $this->sanitize_type( $arg['type'] ?? 'string' );
 
-			$schema[ $title ] = [
+			$property = [
 				'type'        => $type,
 				'description' => $description,
 			];
+
+			// Preserve enum and default if present.
+			if ( isset( $arg['enum'] ) ) {
+				$property['enum'] = $arg['enum'];
+			}
+			if ( array_key_exists( 'default', $arg ) ) {
+				$property['default'] = $arg['default'];
+			}
+
+			// Handle array items typing defensively.
+			if ( 'array' === $type && isset( $arg['items'] ) && is_array( $arg['items'] ) ) {
+				$item_type = 'string';
+				if ( isset( $arg['items']['type'] ) ) {
+					$item_type = $this->sanitize_type( $arg['items']['type'] );
+				}
+				$property['items'] = [ 'type' => $item_type ];
+			}
+
+			$schema[ $title ] = $property;
+
 			if ( isset( $arg['required'] ) && true === $arg['required'] ) {
 				$required[] = $title;
 			}
@@ -261,41 +299,48 @@ readonly class RestApi {
 	 * @throws \Exception
 	 */
 	private function sanitize_type( $type ): string {
-
-		$mapping = array(
-			'string'  => 'string',
-			'integer' => 'integer',
-			'int'     => 'integer',
-			'number'  => 'integer',
-			'boolean' => 'boolean',
-			'bool'    => 'boolean',
-		);
-
-		// Validated types:
-		if ( ! \is_array( $type ) && isset( $mapping[ $type ] ) ) {
-			return $mapping[ $type ];
-		}
-
-		if ( 'array' === $type || 'object' === $type ) {
-			return 'string'; // TODO, better solution.
-		}
-		if ( empty( $type ) || 'null' === $type ) {
+		// Coerce and normalize to supported JSON Schema primitives.
+		$normalize = static function ( string $t ): string {
+			$t = strtolower( trim( $t ) );
+			if ( 'int' === $t ) {
+				return 'integer';
+			}
+			if ( 'bool' === $t ) {
+				return 'boolean';
+			}
+			if ( 'float' === $t || 'double' === $t ) {
+				return 'number';
+			}
+			// Accept already-valid primitives
+			if ( in_array( $t, [ 'string', 'integer', 'number', 'boolean', 'array', 'object' ], true ) ) {
+				return $t;
+			}
+			// Everything else becomes string (mixed, scalar, callable, null, unknown, etc.)
 			return 'string';
+		};
+
+		// Handle non-array types quickly.
+		if ( ! is_array( $type ) ) {
+			if ( empty( $type ) ) {
+				return 'string';
+			}
+			return $normalize( (string) $type );
 		}
 
-		if ( ! \is_array( $type ) ) {
-			// @phpstan-ignore binaryOp.invalid
-			throw new \Exception( 'Invalid type: ' . $type );
+		// If array can be either list of allowed types or associative with 'type'.
+		if ( array_key_exists( 'type', $type ) ) {
+			return $this->sanitize_type( $type['type'] );
 		}
 
-		// Find valid values in array.
-		if ( \in_array( 'string', $type, true ) ) {
-			return 'string';
+		// List of possible types: prefer string, integer, number, boolean, array, object.
+		$preferred = [ 'string', 'integer', 'number', 'boolean', 'array', 'object' ];
+		foreach ( $preferred as $p ) {
+			if ( in_array( $p, $type, true ) ) {
+				return $p;
+			}
 		}
-		if ( \in_array( 'integer', $type, true ) ) {
-			return 'integer';
-		}
-		// TODO, better types handling.
+
+		// Fallback
 		return 'string';
 	}
 }

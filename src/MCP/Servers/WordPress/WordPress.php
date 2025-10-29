@@ -15,7 +15,7 @@ class WordPress extends Server {
 		parent::__construct( 'WordPress', $logger );
 
 		$all_tools = [
-			...( new RestApi( $this->logger ) )->get_tools(),
+			...( new RestApi( $this->logger ) )->get_tools( [ 'namespaces' => [ 'mcp/v1', 'wp/v2' ] ] ),
 			...( new CommunityEvents() )->get_tools(),
 			...( new Dummy() )->get_tools(),
 		];
