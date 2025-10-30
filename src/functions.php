@@ -18,6 +18,7 @@ use function add_action;
  */
 function boot(): void {
 	add_action( 'init', __NAMESPACE__ . '\register_session_post_type' );
+	add_action( 'init', __NAMESPACE__ . '\register_oauth_discovery_routes' );
 	add_action( 'rest_api_init', __NAMESPACE__ . '\register_rest_routes' );
 
 	add_action( 'mcp_sessions_cleanup', __NAMESPACE__ . '\delete_old_sessions' );
@@ -77,6 +78,12 @@ function activate_plugin(): void {
 	// Create OAuth database tables
 	\MCP\OAuth\Database::create_tables();
 
+	// Register OAuth discovery rewrite rules
+	register_oauth_discovery_routes();
+
+	// Flush rewrite rules to make .well-known endpoints work
+	flush_rewrite_rules();
+
 	// Schedule cleanup tasks
 	if ( false === wp_next_scheduled( 'mcp_sessions_cleanup' ) ) {
 		wp_schedule_event( time(), 'hourly', 'mcp_sessions_cleanup' );
@@ -130,6 +137,15 @@ function register_session_post_type(): void {
 }
 
 /**
+ * Registers OAuth discovery routes (must be at /.well-known/).
+ *
+ * @return void
+ */
+function register_oauth_discovery_routes(): void {
+	\MCP\OAuth\DiscoveryController::register_routes();
+}
+
+/**
  * Registers the MCP server REST API routes.
  *
  * @return void
@@ -139,8 +155,7 @@ function register_rest_routes(): void {
 	$controller = new RestController();
 	$controller->register_routes();
 
-	// Register OAuth routes
-	\MCP\OAuth\DiscoveryController::register_routes();
+	// Register OAuth REST API routes
 	\MCP\OAuth\AuthorizeController::register_routes();
 	\MCP\OAuth\TokenController::register_routes();
 	\MCP\OAuth\RegistrationController::register_routes();

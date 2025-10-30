@@ -7,41 +7,77 @@
 
 namespace MCP\OAuth;
 
-use WP_REST_Server;
-use WP_REST_Request;
-use WP_REST_Response;
-
 /**
  * Handles OAuth 2.0 discovery endpoints per RFC 8414 and RFC 9728.
+ *
+ * These endpoints MUST be at /.well-known/ (root level), not under /wp-json/.
  */
 class DiscoveryController {
 	/**
-	 * Registers discovery routes.
+	 * Registers discovery routes using WordPress rewrite rules.
 	 *
 	 * @return void
 	 */
 	public static function register_routes(): void {
-		// Protected Resource Metadata (RFC 9728)
-		register_rest_route(
-			'',
-			'/.well-known/oauth-protected-resource',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( __CLASS__, 'protected_resource_metadata' ),
-				'permission_callback' => '__return_true', // Public endpoint
-			)
+		// Add rewrite rules for .well-known endpoints
+		add_rewrite_rule(
+			'^\.well-known/oauth-protected-resource$',
+			'index.php?mcp_oauth_discovery=protected-resource',
+			'top'
 		);
 
-		// Authorization Server Metadata (RFC 8414)
-		register_rest_route(
-			'',
-			'/.well-known/oauth-authorization-server',
-			array(
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => array( __CLASS__, 'authorization_server_metadata' ),
-				'permission_callback' => '__return_true', // Public endpoint
-			)
+		add_rewrite_rule(
+			'^\.well-known/oauth-authorization-server$',
+			'index.php?mcp_oauth_discovery=authorization-server',
+			'top'
 		);
+
+		// Add query var
+		add_filter( 'query_vars', array( __CLASS__, 'add_query_vars' ) );
+
+		// Handle the request
+		add_action( 'template_redirect', array( __CLASS__, 'handle_discovery_request' ) );
+	}
+
+	/**
+	 * Adds custom query vars.
+	 *
+	 * @param array<string> $vars Query vars.
+	 * @return array<string> Modified query vars.
+	 */
+	public static function add_query_vars( array $vars ): array {
+		$vars[] = 'mcp_oauth_discovery';
+		return $vars;
+	}
+
+	/**
+	 * Handles OAuth discovery requests.
+	 *
+	 * @return void
+	 */
+	public static function handle_discovery_request(): void {
+		$discovery_type = get_query_var( 'mcp_oauth_discovery', false );
+
+		if ( ! $discovery_type ) {
+			return;
+		}
+
+		// Set JSON content type
+		header( 'Content-Type: application/json; charset=utf-8' );
+
+		if ( 'protected-resource' === $discovery_type ) {
+			echo wp_json_encode( self::get_protected_resource_metadata() );
+			exit;
+		}
+
+		if ( 'authorization-server' === $discovery_type ) {
+			echo wp_json_encode( self::get_authorization_server_metadata() );
+			exit;
+		}
+
+		// Unknown discovery type
+		status_header( 404 );
+		exit;
 	}
 
 	/**
@@ -49,18 +85,15 @@ class DiscoveryController {
 	 *
 	 * This tells clients where the authorization server is.
 	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @return WP_REST_Response Response object.
+	 * @return array<string, mixed> Metadata array.
 	 */
-	public static function protected_resource_metadata( WP_REST_Request $request ): WP_REST_Response {
+	private static function get_protected_resource_metadata(): array {
 		$base_url = get_site_url();
 
-		$metadata = array(
+		return array(
 			'resource'              => $base_url . '/wp-json/mcp/v1/mcp',
 			'authorization_servers' => array( $base_url ),
 		);
-
-		return new WP_REST_Response( $metadata, 200 );
 	}
 
 	/**
@@ -68,13 +101,12 @@ class DiscoveryController {
 	 *
 	 * This tells clients about OAuth capabilities and endpoints.
 	 *
-	 * @param WP_REST_Request $request Request object.
-	 * @return WP_REST_Response Response object.
+	 * @return array<string, mixed> Metadata array.
 	 */
-	public static function authorization_server_metadata( WP_REST_Request $request ): WP_REST_Response {
+	private static function get_authorization_server_metadata(): array {
 		$base_url = get_site_url();
 
-		$metadata = array(
+		return array(
 			'issuer'                                => $base_url,
 			'authorization_endpoint'                => $base_url . '/wp-json/mcp/v1/oauth/authorize',
 			'token_endpoint'                        => $base_url . '/wp-json/mcp/v1/oauth/token',
@@ -87,7 +119,5 @@ class DiscoveryController {
 			'code_challenge_methods_supported'      => array( 'S256', 'plain' ),
 			'resource_indicators_supported'         => true,
 		);
-
-		return new WP_REST_Response( $metadata, 200 );
 	}
 }
