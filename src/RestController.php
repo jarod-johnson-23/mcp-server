@@ -153,36 +153,26 @@ class RestController extends WP_REST_Controller {
 		if ( isset( $request['method'] ) ) {
 			// It's a Request or Notification
 			if ( isset( $request['id'] ) ) {
-				$params = new RequestParams();
-
-				if ( isset( $request['params'] ) ) {
-					foreach ( $request['params'] as $key => $value ) {
-						// @phpstan-ignore property.dynamicName
-						$params->{$key} = $value;
-					}
-				}
+				// Don't create typed RequestParams objects - just pass the raw array
+				// The Server.php process_request() expects arrays anyway
+				$params = $request['params'] ?? null;
 
 				$message = new JsonRpcMessage(
 					new JSONRPCRequest(
 						'2.0',
 						new RequestId( (string) $request['id'] ),
-						isset( $request['params'] ) ? $params : null,
+						$params,
 						$request['method'],
 					)
 				);
 			} else {
-				$params = new NotificationParams();
+				// Don't create typed NotificationParams objects - just pass the raw array
+				$params = $request['params'] ?? null;
 
-				if ( isset( $request['params'] ) ) {
-					foreach ( $request['params'] as $key => $value ) {
-						// @phpstan-ignore property.dynamicName
-						$params->{$key} = $value;
-					}
-				}
 				$message = new JsonRpcMessage(
 					new JSONRPCNotification(
 						'2.0',
-						isset( $request['params'] ) ? $params : null,
+						$params,
 						$request['method'],
 					)
 				);

@@ -319,10 +319,10 @@ class Server {
 			);
 		}
 
-		// Convert RequestParams object to array for handler compatibility
+		// Get params - may already be an array from RestController, or could be an object
 		$params = $request->params ?? null;
-		if ( $params !== null ) {
-			// Convert object to array recursively
+		if ( $params !== null && ! is_array( $params ) ) {
+			// Convert object to array recursively (for backwards compatibility)
 			$params = json_decode( json_encode( $params ), true );
 		}
 
@@ -344,10 +344,10 @@ class Server {
 		$handler  = $handlers[ $method ] ?? null;
 
 		if ( null !== $handler ) {
-			// Convert NotificationParams object to array for handler compatibility
+			// Get params - may already be an array from RestController, or could be an object
 			$params = $notification->params ?? null;
-			if ( $params !== null ) {
-				// Convert object to array recursively
+			if ( $params !== null && ! is_array( $params ) ) {
+				// Convert object to array recursively (for backwards compatibility)
 				$params = json_decode( json_encode( $params ), true );
 			}
 			$handler( $params );
