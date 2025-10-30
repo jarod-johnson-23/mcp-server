@@ -124,7 +124,22 @@ class Database {
 		$codes_table  = $wpdb->prefix . self::CODES_TABLE;
 		$tokens_table = $wpdb->prefix . self::TOKENS_TABLE;
 
+		// Get expired tokens before deleting to clean up WordPress App Passwords
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$expired_tokens = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT user_id, token FROM $tokens_table WHERE expires_at < %s",
+				current_time( 'mysql' )
+			)
+		);
+
+		// Delete corresponding WordPress Application Passwords
+		foreach ( $expired_tokens as $token_data ) {
+			// Token field contains the App Password UUID
+			\WP_Application_Passwords::delete_application_password( $token_data->user_id, $token_data->token );
+		}
+
+		// Delete expired authorization codes
 		$wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM $codes_table WHERE expires_at < %s",
@@ -132,6 +147,7 @@ class Database {
 			)
 		);
 
+		// Delete expired tokens
 		$wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM $tokens_table WHERE expires_at < %s",

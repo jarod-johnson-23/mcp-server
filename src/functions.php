@@ -25,6 +25,10 @@ function boot(): void {
 	add_action( 'mcp_oauth_cleanup', __NAMESPACE__ . '\cleanup_expired_oauth_tokens' );
 
 	add_filter( 'update_plugins_mcp-wp.github.io', __NAMESPACE__ . '\filter_update_plugins', 10, 2 );
+
+	// Hook into WordPress authentication to handle Bearer token auth
+	// This uses WordPress's Application Password system which works with WP Engine
+	add_filter( 'determine_current_user', __NAMESPACE__ . '\validate_bearer_token', 20 );
 }
 
 /**

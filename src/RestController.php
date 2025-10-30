@@ -505,57 +505,27 @@ class RestController extends WP_REST_Controller {
 	 * @return true|WP_Error True if authenticated, WP_Error otherwise.
 	 */
 	protected function authenticate_request( WP_REST_Request $request ): true|WP_Error {
-		// Get Authorization header
-		$auth_header = $request->get_header( 'Authorization' );
+		// Use WordPress's built-in Application Password authentication
+		// This works with WP Engine because it's WordPress's native auth system
 
-		if ( empty( $auth_header ) ) {
-			return new WP_Error(
-				'rest_no_auth',
-				__( 'No authorization header provided. OAuth 2.1 Bearer token required.', 'mcp' ),
-				array(
-					'status'  => WP_Http::UNAUTHORIZED,
-					'headers' => array(
-						'WWW-Authenticate' => 'Bearer realm="' . get_site_url() . '/wp-json/mcp/v1/mcp"',
-					),
-				)
-			);
+		// Check if user is already authenticated (WordPress handles this via determine_current_user filter)
+		$user_id = get_current_user_id();
+
+		if ( $user_id ) {
+			// Already authenticated via WordPress's Application Password system
+			return true;
 		}
 
-		// Extract Bearer token
-		if ( ! preg_match( '/^Bearer\s+(.+)$/i', $auth_header, $matches ) ) {
-			return new WP_Error(
-				'rest_invalid_auth',
-				__( 'Invalid authorization format. Expected: Bearer <token>', 'mcp' ),
-				array(
-					'status'  => WP_Http::UNAUTHORIZED,
-					'headers' => array(
-						'WWW-Authenticate' => 'Bearer realm="' . get_site_url() . '/wp-json/mcp/v1/mcp", error="invalid_token"',
-					),
-				)
-			);
-		}
-
-		$token = $matches[1];
-
-		// Validate token
-		$token_data = \MCP\OAuth\TokenStorage::validate_access_token( $token );
-
-		if ( ! $token_data ) {
-			return new WP_Error(
-				'rest_invalid_token',
-				__( 'Invalid or expired OAuth token.', 'mcp' ),
-				array(
-					'status'  => WP_Http::UNAUTHORIZED,
-					'headers' => array(
-						'WWW-Authenticate' => 'Bearer realm="' . get_site_url() . '/wp-json/mcp/v1/mcp", error="invalid_token"',
-					),
-				)
-			);
-		}
-
-		// Set current user based on token
-		wp_set_current_user( $token_data['user_id'] );
-
-		return true;
+		// No authentication found
+		return new WP_Error(
+			'rest_no_auth',
+			__( 'Authentication required. Please provide Authorization: Bearer username:password', 'mcp' ),
+			array(
+				'status'  => WP_Http::UNAUTHORIZED,
+				'headers' => array(
+					'WWW-Authenticate' => 'Bearer realm="' . get_site_url() . '/wp-json/mcp/v1/mcp"',
+				),
+			)
+		);
 	}
 }

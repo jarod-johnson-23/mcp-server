@@ -133,15 +133,35 @@ class TokenStorage {
 	public static function create_access_token( string $client_id, int $user_id, string $scope = '' ): string {
 		global $wpdb;
 
-		$token      = self::generate_token();
-		$expires_at = gmdate( 'Y-m-d H:i:s', time() + self::TOKEN_LIFETIME );
+		// Create a WordPress Application Password for this OAuth token
+		// This works with WP Engine because they allow WordPress's native auth
+		$user = get_user_by( 'id', $user_id );
+		if ( ! $user ) {
+			return '';
+		}
 
-		$table = $wpdb->prefix . Database::TOKENS_TABLE;
+		// Generate the app password using WordPress's built-in system
+		$app_password_name = 'MCP OAuth - ' . $client_id . ' - ' . gmdate( 'Y-m-d H:i:s' );
+		$created           = \WP_Application_Passwords::create_new_application_password(
+			$user_id,
+			array( 'name' => $app_password_name )
+		);
+
+		if ( is_wp_error( $created ) ) {
+			return '';
+		}
+
+		// $created[0] is the raw password, $created[1] is the hashed entry
+		$raw_password = $created[0];
+
+		// Store the mapping in our OAuth tokens table for tracking
+		$expires_at = gmdate( 'Y-m-d H:i:s', time() + self::TOKEN_LIFETIME );
+		$table      = $wpdb->prefix . Database::TOKENS_TABLE;
 
 		$wpdb->insert(
 			$table,
 			array(
-				'token'      => $token,
+				'token'      => $created[1]['uuid'], // Store UUID for reference
 				'client_id'  => $client_id,
 				'user_id'    => $user_id,
 				'scope'      => $scope,
@@ -150,7 +170,9 @@ class TokenStorage {
 			array( '%s', '%s', '%d', '%s', '%s' )
 		);
 
-		return $token;
+		// Return in WordPress Application Password format: username:password
+		// This is what Claude Code will send as: Authorization: Bearer username:password
+		return $user->user_login . ':' . $raw_password;
 	}
 
 	/**
