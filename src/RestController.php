@@ -108,7 +108,7 @@ class RestController extends WP_REST_Controller {
 	 * Per MCP Streamable HTTP spec:
 	 * - POST requests with 'initialize' method do not require a session
 	 * - All other POST requests require a valid session (via Mcp-Session-Id header or cookie)
-	 * - Authentication is handled via WordPress (Basic Auth with Application Passwords)
+	 * - Authentication uses OAuth 2.1 Bearer tokens
 	 *
 	 * @phpstan-param WP_REST_Request<array{jsonrpc: string, id?: string|number, method: string, params: array<string, mixed>}> $request
 	 *
@@ -116,19 +116,19 @@ class RestController extends WP_REST_Controller {
 	 * @return true|WP_Error True if the request has access to create items, WP_Error object otherwise.
 	 */
 	public function create_item_permissions_check( $request ): true|WP_Error {
-		if ( ! is_user_logged_in() ) {
-			return new WP_Error(
-				'rest_not_logged_in',
-				__( 'You are not currently logged in.', 'mcp' ),
-				array( 'status' => WP_Http::UNAUTHORIZED )
-			);
+		// Validate OAuth Bearer token and authenticate user
+		$auth_result = $this->authenticate_request( $request );
+		if ( is_wp_error( $auth_result ) ) {
+			return $auth_result;
 		}
 
-		if ( 'initialize' !== $request['method'] ) {
-			return $this->check_session( $request );
+		// For initialize method, authentication is sufficient
+		if ( 'initialize' === $request['method'] ) {
+			return true;
 		}
 
-		return true;
+		// For all other methods, also check session
+		return $this->check_session( $request );
 	}
 
 	/**
@@ -268,12 +268,10 @@ class RestController extends WP_REST_Controller {
 	 * @return true|WP_Error True if the request has access to delete the item, WP_Error object otherwise.
 	 */
 	public function delete_item_permissions_check( $request ): true|WP_Error {
-		if ( ! is_user_logged_in() ) {
-			return new WP_Error(
-				'rest_not_logged_in',
-				__( 'You are not currently logged in.', 'mcp' ),
-				array( 'status' => WP_Http::UNAUTHORIZED )
-			);
+		// Validate OAuth Bearer token and authenticate user
+		$auth_result = $this->authenticate_request( $request );
+		if ( is_wp_error( $auth_result ) ) {
+			return $auth_result;
 		}
 
 		return $this->check_session( $request );
@@ -496,5 +494,71 @@ class RestController extends WP_REST_Controller {
 		);
 
 		$response->header( 'Set-Cookie', $cookie_value );
+	}
+
+	/**
+	 * Authenticates a request using OAuth 2.1 Bearer token.
+	 *
+	 * Per MCP spec, HTTP transport MUST use OAuth 2.1 for authentication.
+	 * This validates the Bearer token and sets the current WordPress user.
+	 *
+	 * @phpstan-param WP_REST_Request<array{jsonrpc: string, id?: string|number, method: string, params: array<string, mixed>}> $request
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return true|WP_Error True if authenticated, WP_Error otherwise.
+	 */
+	protected function authenticate_request( WP_REST_Request $request ): true|WP_Error {
+		// Get Authorization header
+		$auth_header = $request->get_header( 'Authorization' );
+
+		if ( empty( $auth_header ) ) {
+			return new WP_Error(
+				'rest_no_auth',
+				__( 'No authorization header provided. OAuth 2.1 Bearer token required.', 'mcp' ),
+				array(
+					'status'  => WP_Http::UNAUTHORIZED,
+					'headers' => array(
+						'WWW-Authenticate' => 'Bearer realm="' . get_site_url() . '/wp-json/mcp/v1/mcp"',
+					),
+				)
+			);
+		}
+
+		// Extract Bearer token
+		if ( ! preg_match( '/^Bearer\s+(.+)$/i', $auth_header, $matches ) ) {
+			return new WP_Error(
+				'rest_invalid_auth',
+				__( 'Invalid authorization format. Expected: Bearer <token>', 'mcp' ),
+				array(
+					'status'  => WP_Http::UNAUTHORIZED,
+					'headers' => array(
+						'WWW-Authenticate' => 'Bearer realm="' . get_site_url() . '/wp-json/mcp/v1/mcp", error="invalid_token"',
+					),
+				)
+			);
+		}
+
+		$token = $matches[1];
+
+		// Validate token
+		$token_data = \MCP\OAuth\TokenStorage::validate_access_token( $token );
+
+		if ( ! $token_data ) {
+			return new WP_Error(
+				'rest_invalid_token',
+				__( 'Invalid or expired OAuth token.', 'mcp' ),
+				array(
+					'status'  => WP_Http::UNAUTHORIZED,
+					'headers' => array(
+						'WWW-Authenticate' => 'Bearer realm="' . get_site_url() . '/wp-json/mcp/v1/mcp", error="invalid_token"',
+					),
+				)
+			);
+		}
+
+		// Set current user based on token
+		wp_set_current_user( $token_data['user_id'] );
+
+		return true;
 	}
 }

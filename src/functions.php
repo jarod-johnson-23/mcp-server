@@ -21,10 +21,9 @@ function boot(): void {
 	add_action( 'rest_api_init', __NAMESPACE__ . '\register_rest_routes' );
 
 	add_action( 'mcp_sessions_cleanup', __NAMESPACE__ . '\delete_old_sessions' );
+	add_action( 'mcp_oauth_cleanup', __NAMESPACE__ . '\cleanup_expired_oauth_tokens' );
 
 	add_filter( 'update_plugins_mcp-wp.github.io', __NAMESPACE__ . '\filter_update_plugins', 10, 2 );
-
-	add_filter( 'determine_current_user', __NAMESPACE__ . '\validate_bearer_token', 30 );
 }
 
 /**
@@ -75,8 +74,16 @@ function filter_update_plugins( $update, $plugin_data ) {
 function activate_plugin(): void {
 	register_session_post_type();
 
+	// Create OAuth database tables
+	\MCP\OAuth\Database::create_tables();
+
+	// Schedule cleanup tasks
 	if ( false === wp_next_scheduled( 'mcp_sessions_cleanup' ) ) {
 		wp_schedule_event( time(), 'hourly', 'mcp_sessions_cleanup' );
+	}
+
+	if ( false === wp_next_scheduled( 'mcp_oauth_cleanup' ) ) {
+		wp_schedule_event( time(), 'hourly', 'mcp_oauth_cleanup' );
 	}
 }
 
@@ -90,10 +97,19 @@ function activate_plugin(): void {
 function deactivate_plugin(): void {
 	unregister_post_type( 'mcp_session' );
 
+	// Unschedule cleanup tasks
 	$timestamp = wp_next_scheduled( 'mcp_sessions_cleanup' );
 	if ( false !== $timestamp ) {
 		wp_unschedule_event( $timestamp, 'mcp_sessions_cleanup' );
 	}
+
+	$timestamp = wp_next_scheduled( 'mcp_oauth_cleanup' );
+	if ( false !== $timestamp ) {
+		wp_unschedule_event( $timestamp, 'mcp_oauth_cleanup' );
+	}
+
+	// Note: We don't drop OAuth tables on deactivation to preserve client registrations
+	// To fully remove OAuth data, use: \MCP\OAuth\Database::drop_tables();
 }
 
 /**
@@ -119,8 +135,15 @@ function register_session_post_type(): void {
  * @return void
  */
 function register_rest_routes(): void {
+	// Register MCP routes
 	$controller = new RestController();
 	$controller->register_routes();
+
+	// Register OAuth routes
+	\MCP\OAuth\DiscoveryController::register_routes();
+	\MCP\OAuth\AuthorizeController::register_routes();
+	\MCP\OAuth\TokenController::register_routes();
+	\MCP\OAuth\RegistrationController::register_routes();
 }
 
 /**
@@ -185,4 +208,13 @@ function validate_bearer_token( $input_user ) {
 
 	// If it wasn't a user what got returned, just pass on what we had received originally.
 	return $input_user;
+}
+
+/**
+ * Cleans up expired OAuth authorization codes and access tokens.
+ *
+ * @return void
+ */
+function cleanup_expired_oauth_tokens(): void {
+	\MCP\OAuth\Database::cleanup_expired();
 }
