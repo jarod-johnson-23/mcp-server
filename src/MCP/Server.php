@@ -147,7 +147,7 @@ class Server {
 
 	// TODO: Implement pagination, see https://spec.modelcontextprotocol.io/specification/2024-11-05/server/utilities/pagination/#response-format
 	// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found
-	public function list_tools( RequestParams $params ): ListToolsResult {
+	public function list_tools( ?array $params ): ListToolsResult {
 		$prepared_tools = [];
 		foreach ( $this->tools as $tool ) {
 			$prepared_tools[] = $tool['tool'];
@@ -156,23 +156,27 @@ class Server {
 		return new ListToolsResult( $prepared_tools );
 	}
 
-	public function call_tool( RequestParams $params ): CallToolResult {
+	public function call_tool( ?array $params ): CallToolResult {
+		$tool_name = $params['name'] ?? null;
+		$arguments = $params['arguments'] ?? [];
+
+		if ( ! $tool_name ) {
+			throw new InvalidArgumentException( 'Tool name is required' );
+		}
+
 		$found_tool = null;
 		foreach ( $this->tools as $name => $tool ) {
-			// @phpstan-ignore property.notFound
-			if ( $name === $params->name ) {
+			if ( $name === $tool_name ) {
 				$found_tool = $tool;
 				break;
 			}
 		}
 
 		if ( null === $found_tool ) {
-			// @phpstan-ignore property.notFound
-			throw new InvalidArgumentException( "Unknown tool: {$params->name}" );
+			throw new InvalidArgumentException( "Unknown tool: {$tool_name}" );
 		}
 
-		// @phpstan-ignore property.notFound
-		$result = call_user_func( $found_tool['callback'], $params->arguments );
+		$result = call_user_func( $found_tool['callback'], $arguments );
 
 		if ( $result instanceof CallToolResult ) {
 			return $result;
@@ -206,9 +210,13 @@ class Server {
 	}
 
 	// TODO: Make dynamic.
-	public function read_resources( RequestParams $params ): ReadResourceResult {
-		// @phpstan-ignore property.notFound
-		$uri = $params->uri;
+	public function read_resources( ?array $params ): ReadResourceResult {
+		$uri = $params['uri'] ?? null;
+
+		if ( ! $uri ) {
+			throw new InvalidArgumentException( 'Resource URI is required' );
+		}
+
 		if ( 'example://greeting' !== $uri ) {
 			throw new InvalidArgumentException( "Unknown resource: {$uri}" );
 		}
@@ -236,7 +244,7 @@ class Server {
 
 	// TODO: Implement pagination, see https://spec.modelcontextprotocol.io/specification/2024-11-05/server/utilities/pagination/#response-format
     // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found
-	public function list_resource_templates( RequestParams $params ): ListResourceTemplatesResult {
+	public function list_resource_templates( ?array $params ): ListResourceTemplatesResult {
 		return new ListResourceTemplatesResult( $this->resource_templates );
 	}
 

@@ -38,17 +38,20 @@ Use WordPress's built-in Application Password system, which WP Engine must allow
 
 ## Testing
 
-Upload and run `test-app-password-auth.php` to verify:
+Upload and run `test-final-complete.php` to verify everything works:
 
 ```bash
 # Access the test script in your browser:
-https://your-site.com/wp-content/plugins/mcp-server/test-app-password-auth.php
+https://your-site.com/wp-content/plugins/mcp-server/test-final-complete.php
 ```
 
 Expected output:
-- ✓ Application Password created
-- ✓ SUCCESS! Authentication worked!
-- Shows capabilities with tools
+- ✓ Authentication working
+- ✓ Initialize working
+- ✓ Ping working
+- ✓ 194+ WordPress tools available
+- ✓ Tool execution working
+- 🎉 ALL TESTS PASSED!
 
 ## Files Modified
 
@@ -56,6 +59,7 @@ Expected output:
 2. `src/RestController.php` - Uses WordPress authentication instead of custom validation
 3. `src/functions.php` - Hooks Bearer token validation into WordPress auth
 4. `src/OAuth/Database.php` - Cleans up expired App Passwords
+5. `src/MCP/Server.php` - Fixed parameter type mismatches (RequestParams → ?array)
 
 ## Next Steps
 
