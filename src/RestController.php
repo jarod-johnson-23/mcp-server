@@ -106,9 +106,9 @@ class RestController extends WP_REST_Controller {
 	 * Checks if a given request has access to create items.
 	 *
 	 * Per MCP Streamable HTTP spec:
-	 * - POST requests with 'initialize' method do not require a session
-	 * - All other POST requests require a valid session (via Mcp-Session-Id header or cookie)
-	 * - Authentication uses OAuth 2.1 Bearer tokens
+	 * - OAuth 2.1 Bearer token authentication is required
+	 * - Sessions are auto-created on initialize, but not required for OAuth
+	 * - All authenticated requests have access
 	 *
 	 * @phpstan-param WP_REST_Request<array{jsonrpc: string, id?: string|number, method: string, params: array<string, mixed>}> $request
 	 *
@@ -122,13 +122,9 @@ class RestController extends WP_REST_Controller {
 			return $auth_result;
 		}
 
-		// For initialize method, authentication is sufficient
-		if ( 'initialize' === $request['method'] ) {
-			return true;
-		}
-
-		// For all other methods, also check session
-		return $this->check_session( $request );
+		// OAuth authentication is sufficient - no session required
+		// Sessions are only created on initialize for tracking purposes
+		return true;
 	}
 
 	/**
@@ -274,7 +270,8 @@ class RestController extends WP_REST_Controller {
 			return $auth_result;
 		}
 
-		return $this->check_session( $request );
+		// OAuth authentication is sufficient
+		return true;
 	}
 
 	/**
