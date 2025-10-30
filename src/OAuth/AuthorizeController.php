@@ -54,18 +54,28 @@ class AuthorizeController {
 			return self::error_redirect( $request->get_param( 'redirect_uri' ), $params );
 		}
 
+		// Determine current user (REST API authentication)
+		$user_id = get_current_user_id();
+
+		// If no user, try cookie authentication
+		if ( ! $user_id ) {
+			// Force WordPress to check cookies for authentication
+			wp_set_current_user( 0 );
+			$user_id = apply_filters( 'determine_current_user', false );
+			if ( $user_id ) {
+				wp_set_current_user( $user_id );
+			}
+		}
+
 		// Check if user is logged in
-		if ( ! is_user_logged_in() ) {
-			// Redirect to login with return URL
+		if ( ! $user_id ) {
+			// Redirect to login with return URL using actual HTTP redirect
 			$authorize_url = rest_url( 'mcp/v1/oauth/authorize' ) . '?' . http_build_query( $request->get_params() );
 			$login_url     = wp_login_url( $authorize_url );
-			return new WP_REST_Response(
-				array(
-					'redirect' => $login_url,
-				),
-				302,
-				array( 'Location' => $login_url )
-			);
+
+			// Use actual HTTP redirect instead of REST response
+			wp_redirect( $login_url );
+			exit;
 		}
 
 		$client = ClientRegistry::get_client( $params['client_id'] );
@@ -73,11 +83,11 @@ class AuthorizeController {
 		// Return HTML consent page
 		$html = self::render_consent_page( $client, $params );
 
-		return new WP_REST_Response(
-			$html,
-			200,
-			array( 'Content-Type' => 'text/html' )
-		);
+		// Output HTML directly with proper headers
+		status_header( 200 );
+		header( 'Content-Type: text/html; charset=utf-8' );
+		echo $html;
+		exit;
 	}
 
 	/**
@@ -90,27 +100,51 @@ class AuthorizeController {
 		// Validate required parameters
 		$params = self::validate_authorization_params( $request );
 		if ( is_wp_error( $params ) ) {
-			return self::error_redirect( $request->get_param( 'redirect_uri' ), $params );
+			$redirect_url = add_query_arg(
+				array(
+					'error'             => $params->get_error_code(),
+					'error_description' => $params->get_error_message(),
+					'state'             => $request->get_param( 'state' ),
+				),
+				$request->get_param( 'redirect_uri' )
+			);
+			wp_redirect( $redirect_url );
+			exit;
+		}
+
+		// Determine current user (same as GET)
+		$user_id = get_current_user_id();
+		if ( ! $user_id ) {
+			wp_set_current_user( 0 );
+			$user_id = apply_filters( 'determine_current_user', false );
+			if ( $user_id ) {
+				wp_set_current_user( $user_id );
+			}
 		}
 
 		// Check if user is logged in
-		if ( ! is_user_logged_in() ) {
-			return new WP_Error( 'unauthorized', 'User must be logged in', array( 'status' => 401 ) );
+		if ( ! $user_id ) {
+			wp_die( 'Unauthorized. Please log in.', 401 );
 		}
 
 		// Check if user denied access
 		if ( $request->get_param( 'action' ) === 'deny' ) {
-			return self::error_redirect(
-				$params['redirect_uri'],
-				new WP_Error( 'access_denied', 'User denied access' ),
-				$params['state']
+			$redirect_url = add_query_arg(
+				array(
+					'error'             => 'access_denied',
+					'error_description' => 'User denied access',
+					'state'             => $params['state'],
+				),
+				$params['redirect_uri']
 			);
+			wp_redirect( $redirect_url );
+			exit;
 		}
 
 		// User approved - generate authorization code
 		$code = TokenStorage::create_authorization_code(
 			$params['client_id'],
-			get_current_user_id(),
+			$user_id,
 			$params['redirect_uri'],
 			$params['code_challenge'],
 			$params['code_challenge_method'],
@@ -126,11 +160,8 @@ class AuthorizeController {
 			$params['redirect_uri']
 		);
 
-		return new WP_REST_Response(
-			array( 'redirect' => $redirect_url ),
-			302,
-			array( 'Location' => $redirect_url )
-		);
+		wp_redirect( $redirect_url );
+		exit;
 	}
 
 	/**
