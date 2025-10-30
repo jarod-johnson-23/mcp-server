@@ -12,15 +12,46 @@ Try it by installing and activating the latest nightly build on your own WordPre
 
 ## Description
 
-This WordPress plugin aims to implement the new [Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http), as described in the latest MCP specification.
+This WordPress plugin implements the [Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) from the MCP specification (protocol version 2025-03-26).
 
 Under the hood it uses the [`logiscape/mcp-sdk-php`](https://github.com/logiscape/mcp-sdk-php) package to set up a fully functioning MCP server. Then, this functionality is exposed through a new `wp-json/mcp/v1/mcp` REST API route in WordPress.
 
-Note: the Streamable HTTP transport is not fully implemented yet and there are no tests. So it might not 100% work as expected.
+### Implementation Status
+
+**Supported Features:**
+- ✅ POST-based JSON-RPC message handling
+- ✅ Session management via `Mcp-Session-Id` header and cookies
+- ✅ WordPress REST API tools (198+ endpoints exposed)
+- ✅ Basic Auth via WordPress Application Passwords
+- ✅ MCP protocol version 2025-03-26
+
+**Not Supported:**
+- ❌ Server-Sent Events (SSE) for bidirectional streaming
+- ❌ GET requests (returns HTTP 405 per spec)
+- ❌ OAuth authentication (uses Basic Auth instead)
+
+This is a **POST-only** implementation suitable for clients that support Streamable HTTP without requiring SSE.
 
 ## Usage
 
-Given that no other MCP client supports the new Streamable HTTP transport yet, this plugin works best in companion with the [WP-CLI AI command](https://github.com/mcp-wp/ai-command).
+### With Claude Code
+
+1. **Install the plugin** on your WordPress site
+2. **Create an Application Password:**
+   - Go to Users → Your Profile in WordPress admin
+   - Scroll to "Application Passwords"
+   - Create a new password and copy it
+3. **Add the MCP server to Claude Code:**
+   ```bash
+   claude mcp add --transport http wordpress \
+     https://your-site.com/wp-json/mcp/v1/mcp \
+     --header "Authorization: Basic $(echo -n 'username:app_password' | base64)"
+   ```
+4. **Start Claude Code** and use `/mcp` to verify connection
+
+### With WP-CLI
+
+This plugin works best in companion with the [WP-CLI AI command](https://github.com/mcp-wp/ai-command):
 
 1. Run `wp plugin install --activate https://github.com/mcp-wp/mcp-server/archive/refs/heads/main.zip`
 2. Run `wp plugin install --activate ai-services`

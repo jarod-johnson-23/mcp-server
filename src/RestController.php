@@ -105,6 +105,11 @@ class RestController extends WP_REST_Controller {
 	/**
 	 * Checks if a given request has access to create items.
 	 *
+	 * Per MCP Streamable HTTP spec:
+	 * - POST requests with 'initialize' method do not require a session
+	 * - All other POST requests require a valid session (via Mcp-Session-Id header or cookie)
+	 * - Authentication is handled via WordPress (Basic Auth with Application Passwords)
+	 *
 	 * @phpstan-param WP_REST_Request<array{jsonrpc: string, id?: string|number, method: string, params: array<string, mixed>}> $request
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
@@ -306,29 +311,21 @@ class RestController extends WP_REST_Controller {
 	/**
 	 * Checks if a given request has access to get a specific item.
 	 *
+	 * Per MCP Streamable HTTP spec: GET requests should return either SSE stream
+	 * or HTTP 405 Method Not Allowed. This signals to clients that the server
+	 * is POST-only and doesn't require OAuth.
+	 *
 	 * @phpstan-param WP_REST_Request<array{jsonrpc: string, id?: string|number, method: string, params: array<string, mixed>}> $request
 	 *
 	 * @param WP_REST_Request $request Full details about the request.
 	 * @return true|WP_Error True if the request has read access for the item, WP_Error object otherwise.
 	 */
 	public function get_item_permissions_check( $request ): true|WP_Error {
-		if ( ! is_user_logged_in() ) {
-			return new WP_Error(
-				'rest_not_logged_in',
-				__( 'You are not currently logged in.', 'mcp' ),
-				array( 'status' => WP_Http::UNAUTHORIZED )
-			);
-		}
-
-		$session = $this->check_session( $request );
-
-		if ( is_wp_error( $session ) ) {
-			return $session;
-		}
-
+		// Per MCP spec: GET should return 405 if SSE is not supported
+		// This prevents Claude Code from attempting OAuth discovery
 		return new WP_Error(
-			'mcp_sse_not_supported',
-			__( 'Server does not currently offer an SSE stream.', 'mcp' ),
+			'rest_no_route',
+			__( 'GET method not supported. This server uses POST-only transport. Please use POST requests with proper authentication headers.', 'mcp' ),
 			array( 'status' => WP_Http::METHOD_NOT_ALLOWED )
 		);
 	}
