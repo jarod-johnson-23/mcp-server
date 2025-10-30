@@ -39,7 +39,8 @@
 	},
 	"autoload": {
 		"psr-4": {
-			"McpWp\\": "src/"
+			"McpWp\\": "src/",
+			"MCP\\": "src/"
 		},
 		"files": [
 			"src/functions.php"
