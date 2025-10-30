@@ -57,7 +57,8 @@ class AuthorizeController {
 		// Check if user is logged in
 		if ( ! is_user_logged_in() ) {
 			// Redirect to login with return URL
-			$login_url = wp_login_url( $request->get_url() . '?' . http_build_query( $request->get_params() ) );
+			$authorize_url = rest_url( 'mcp/v1/oauth/authorize' ) . '?' . http_build_query( $request->get_params() );
+			$login_url     = wp_login_url( $authorize_url );
 			return new WP_REST_Response(
 				array(
 					'redirect' => $login_url,
