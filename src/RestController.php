@@ -153,9 +153,26 @@ class RestController extends WP_REST_Controller {
 		if ( isset( $request['method'] ) ) {
 			// It's a Request or Notification
 			if ( isset( $request['id'] ) ) {
-				// Don't create typed RequestParams objects - just pass the raw array
-				// The Server.php process_request() expects arrays anyway
-				$params = $request['params'] ?? null;
+				$params = null;
+
+				if ( isset( $request['params'] ) ) {
+					// Handle _meta specially as it has a typed property
+					$meta = null;
+					if ( isset( $request['params']['_meta'] ) && is_array( $request['params']['_meta'] ) ) {
+						// Convert _meta array to Meta object if needed
+						$meta = new \Mcp\Types\Meta();
+						// TODO: populate meta properties if needed
+					}
+
+					$params = new RequestParams( $meta );
+
+					// Set all other params using magic __set (goes into extraFields)
+					foreach ( $request['params'] as $key => $value ) {
+						if ( $key !== '_meta' ) {
+							$params->{$key} = $value;
+						}
+					}
+				}
 
 				$message = new JsonRpcMessage(
 					new JSONRPCRequest(
@@ -166,8 +183,24 @@ class RestController extends WP_REST_Controller {
 					)
 				);
 			} else {
-				// Don't create typed NotificationParams objects - just pass the raw array
-				$params = $request['params'] ?? null;
+				$params = null;
+
+				if ( isset( $request['params'] ) ) {
+					// Handle _meta specially for notifications too
+					$meta = null;
+					if ( isset( $request['params']['_meta'] ) && is_array( $request['params']['_meta'] ) ) {
+						$meta = new \Mcp\Types\Meta();
+					}
+
+					$params = new NotificationParams( $meta );
+
+					// Set all other params using magic __set
+					foreach ( $request['params'] as $key => $value ) {
+						if ( $key !== '_meta' ) {
+							$params->{$key} = $value;
+						}
+					}
+				}
 
 				$message = new JsonRpcMessage(
 					new JSONRPCNotification(
