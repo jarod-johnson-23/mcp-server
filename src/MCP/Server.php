@@ -311,7 +311,13 @@ class Server {
 			);
 		}
 
+		// Convert RequestParams object to array for handler compatibility
 		$params = $request->params ?? null;
+		if ( $params !== null ) {
+			// Convert object to array recursively
+			$params = json_decode( json_encode( $params ), true );
+		}
+
 		$result = $handler( $params );
 
 		if ( ! $result instanceof Result ) {
@@ -330,11 +336,16 @@ class Server {
 		$handler  = $handlers[ $method ] ?? null;
 
 		if ( null !== $handler ) {
+			// Convert NotificationParams object to array for handler compatibility
 			$params = $notification->params ?? null;
+			if ( $params !== null ) {
+				// Convert object to array recursively
+				$params = json_decode( json_encode( $params ), true );
+			}
 			$handler( $params );
+		} else {
+			$this->logger->warning( "No handler registered for notification method: $method" );
 		}
-
-		$this->logger->warning( "No handler registered for notification method: $method" );
 	}
 
 	/**
