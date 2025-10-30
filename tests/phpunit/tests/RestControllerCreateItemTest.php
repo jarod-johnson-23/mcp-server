@@ -117,6 +117,69 @@ class RestControllerCreateItemTest extends TestCase {
 		$this->assertNotNull( $session_post );
 	}
 
+	public function test_sets_session_cookie(): void {
+		wp_set_current_user( self::$admin );
+
+		$request = new WP_REST_Request( 'POST', '/mcp/v1/mcp' );
+		$request->add_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			json_encode(
+				[
+					'jsonrpc' => '2.0',
+					'id'      => '0',
+					'method'  => 'initialize',
+				],
+				JSON_THROW_ON_ERROR
+			)
+		);
+
+		$response = rest_get_server()->dispatch( $request );
+		$headers  = $response->get_headers();
+
+		$this->assertArrayHasKey( 'Set-Cookie', $headers );
+		$this->assertStringContainsString( 'mcp_session_id=', $headers['Set-Cookie'] );
+	}
+
+	public function test_allows_session_via_cookie(): void {
+		wp_set_current_user( self::$admin );
+
+		$session_id = wp_generate_uuid4();
+		wp_insert_post(
+			[
+				'post_type'   => 'mcp_session',
+				'post_status' => 'publish',
+				'post_title'  => $session_id,
+				'post_name'   => $session_id,
+			]
+		);
+
+		// Simulate cookie being set
+		$_COOKIE['mcp_session_id'] = $session_id;
+
+		$request = new WP_REST_Request( 'POST', '/mcp/v1/mcp' );
+		$request->add_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			json_encode(
+				[
+					'jsonrpc' => '2.0',
+					'id'      => '0',
+					'method'  => 'tools/list',
+					'params'  => [],
+				],
+				JSON_THROW_ON_ERROR
+			)
+		);
+
+		$response = rest_get_server()->dispatch( $request );
+
+		unset( $_COOKIE['mcp_session_id'] );
+
+		$data = $response->get_data();
+
+		$this->assertEquals( 200, $response->get_status() );
+		$this->assertInstanceOf( JsonRpcMessage::class, $data, 'Response is not a JSON-RPC message' );
+	}
+
 	public function test_rejects_invalid_session(): void {
 		wp_set_current_user( self::$admin );
 

@@ -102,6 +102,35 @@ class RestControllerDeleteItemTest extends TestCase {
 		$this->assertNull( $session_post_after );
 	}
 
+	public function test_clears_session_cookie_on_delete(): void {
+		wp_set_current_user( self::$admin );
+
+		$session_id = wp_generate_uuid4();
+		wp_insert_post(
+			[
+				'post_type'   => 'mcp_session',
+				'post_status' => 'publish',
+				'post_title'  => $session_id,
+				'post_name'   => $session_id,
+			]
+		);
+
+		// Simulate cookie being set
+		$_COOKIE['mcp_session_id'] = $session_id;
+
+		$request = new WP_REST_Request( 'DELETE', '/mcp/v1/mcp' );
+		$request->add_header( 'Content-Type', 'application/json' );
+		$response = rest_get_server()->dispatch( $request );
+
+		unset( $_COOKIE['mcp_session_id'] );
+
+		$headers = $response->get_headers();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertArrayHasKey( 'Set-Cookie', $headers );
+		$this->assertStringContainsString( 'mcp_session_id=;', $headers['Set-Cookie'] );
+	}
+
 	public function filter_rest_url_for_leading_slash( $url, $path ) {
 		if ( is_multisite() || get_option( 'permalink_structure' ) ) {
 			return $url;

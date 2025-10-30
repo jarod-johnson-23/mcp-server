@@ -33,7 +33,12 @@ use WP_REST_Server;
  */
 class RestController extends WP_REST_Controller {
 	/**
-	 * MCP session ID header name.
+	 * MCP session ID cookie name.
+	 */
+	protected const SESSION_COOKIE_NAME = 'mcp_session_id';
+
+	/**
+	 * MCP session ID header name (kept for backward compatibility).
 	 */
 	protected const SESSION_ID_HEADER = 'Mcp-Session-Id';
 
@@ -234,6 +239,10 @@ class RestController extends WP_REST_Controller {
 				]
 			);
 
+			// Set cookie for session management
+			$this->set_session_cookie( $uuid, $response );
+
+			// Also set header for backward compatibility
 			$response->header( self::SESSION_ID_HEADER, $uuid );
 		}
 
@@ -274,16 +283,23 @@ class RestController extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error Response object on success, or WP_Error object on failure.
 	 */
 	public function delete_item( $request ): WP_Error|WP_REST_Response {
+		$session_id = $this->get_session_id( $request );
+
 		/**
 		 * Session post object.
 		 *
 		 * @var WP_Post $session
 		 */
-		$session = $this->get_session( (string) $request->get_header( self::SESSION_ID_HEADER ) );
+		$session = $this->get_session( $session_id );
 
 		wp_delete_post( $session->ID, true );
 
-		return new WP_REST_Response( '' );
+		$response = new WP_REST_Response( '' );
+
+		// Clear the session cookie
+		$this->clear_session_cookie( $response );
+
+		return $response;
 	}
 
 
@@ -371,7 +387,7 @@ class RestController extends WP_REST_Controller {
 	 * @return true|WP_Error True if a valid session was provided, WP_Error object otherwise.
 	 */
 	protected function check_session( WP_REST_Request $request ): true|WP_Error {
-		$session_id = (string) $request->get_header( self::SESSION_ID_HEADER );
+		$session_id = $this->get_session_id( $request );
 
 		if ( empty( $session_id ) ) {
 			return new WP_Error(
@@ -416,5 +432,72 @@ class RestController extends WP_REST_Controller {
 		}
 
 		return $posts[0];
+	}
+
+	/**
+	 * Gets the session ID from cookie or header.
+	 *
+	 * Checks cookie first (preferred), then falls back to header for backward compatibility.
+	 *
+	 * @phpstan-param WP_REST_Request<array{jsonrpc: string, id?: string|number, method: string, params: array<string, mixed>}> $request
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return string Session ID if found, empty string otherwise.
+	 */
+	protected function get_session_id( WP_REST_Request $request ): string {
+		// First try to get from cookie (preferred method)
+		if ( isset( $_COOKIE[ self::SESSION_COOKIE_NAME ] ) && is_string( $_COOKIE[ self::SESSION_COOKIE_NAME ] ) ) {
+			return $_COOKIE[ self::SESSION_COOKIE_NAME ];
+		}
+
+		// Fall back to header for backward compatibility
+		$header_value = $request->get_header( self::SESSION_ID_HEADER );
+		return is_string( $header_value ) ? $header_value : '';
+	}
+
+	/**
+	 * Sets the session cookie in the response.
+	 *
+	 * @param string           $session_id Session ID to set.
+	 * @param WP_REST_Response $response   Response object to add cookie header to.
+	 * @return void
+	 */
+	protected function set_session_cookie( string $session_id, WP_REST_Response $response ): void {
+		$cookie_params = [
+			'expires'  => time() + DAY_IN_SECONDS, // 1 day expiration
+			'path'     => '/',
+			'domain'   => '',
+			'secure'   => is_ssl(),
+			'httponly' => true,
+			'samesite' => 'Lax',
+		];
+
+		$cookie_value = sprintf(
+			'%s=%s; Expires=%s; Path=%s; HttpOnly; SameSite=%s%s',
+			self::SESSION_COOKIE_NAME,
+			rawurlencode( $session_id ),
+			gmdate( 'D, d M Y H:i:s T', $cookie_params['expires'] ),
+			$cookie_params['path'],
+			$cookie_params['samesite'],
+			$cookie_params['secure'] ? '; Secure' : ''
+		);
+
+		$response->header( 'Set-Cookie', $cookie_value );
+	}
+
+	/**
+	 * Clears the session cookie.
+	 *
+	 * @param WP_REST_Response $response Response object to add cookie header to.
+	 * @return void
+	 */
+	protected function clear_session_cookie( WP_REST_Response $response ): void {
+		$cookie_value = sprintf(
+			'%s=; Expires=%s; Path=/; HttpOnly; SameSite=Lax',
+			self::SESSION_COOKIE_NAME,
+			gmdate( 'D, d M Y H:i:s T', time() - YEAR_IN_SECONDS )
+		);
+
+		$response->header( 'Set-Cookie', $cookie_value );
 	}
 }
