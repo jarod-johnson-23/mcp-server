@@ -7,7 +7,12 @@ use Mcp\Types\ResourceTemplate;
 use McpWp\MCP\Server;
 use McpWp\MCP\Servers\WordPress\Tools\CommunityEvents;
 use McpWp\MCP\Servers\WordPress\Tools\Dummy;
+use McpWp\MCP\Servers\WordPress\Tools\MediaUploadFromUrl;
+use McpWp\MCP\Servers\WordPress\Tools\PluginEditor;
+use McpWp\MCP\Servers\WordPress\Tools\PluginManager;
 use McpWp\MCP\Servers\WordPress\Tools\RestApi;
+use McpWp\MCP\Servers\WordPress\Tools\ThemeEditor;
+use McpWp\MCP\Servers\WordPress\Tools\ThemeSwitch;
 use Psr\Log\LoggerInterface;
 
 class WordPress extends Server {
@@ -18,6 +23,11 @@ class WordPress extends Server {
 			...( new RestApi( $this->logger ) )->get_tools( [ 'namespaces' => [ 'mcp/v1', 'wp/v2' ] ] ),
 			...( new CommunityEvents() )->get_tools(),
 			...( new Dummy() )->get_tools(),
+			...( new MediaUploadFromUrl() )->get_tools(),
+			...( new ThemeSwitch() )->get_tools(),
+			...( new ThemeEditor() )->get_tools(),
+			...( new PluginManager() )->get_tools(),
+			...( new PluginEditor() )->get_tools(),
 		];
 
 		/**

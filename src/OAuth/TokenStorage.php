@@ -17,9 +17,9 @@ class TokenStorage {
 	const CODE_LIFETIME = 600;
 
 	/**
-	 * Access token lifetime in seconds (1 hour).
+	 * Access token lifetime in seconds (30 days).
 	 */
-	const TOKEN_LIFETIME = 3600;
+	const TOKEN_LIFETIME = 2592000;
 
 	/**
 	 * Creates a new authorization code.
