@@ -1,11 +1,10 @@
 <?php
 /**
  * Plugin Name:       MCP Server for WordPress
- * Plugin URI:        https://github.com/swissspidy/mcp
  * Description:       MCP server implementation using the WordPress REST API.
- * Version:           0.1.0
- * Author:            Pascal Birchler
- * Author URI:        https://pascalbirchler.com
+ * Version:           0.2.0
+ * Author:            Jarod Johnson
+ * Author URI:        https://lt.agency
  * License:           Apache-2.0
  * License URI:       https://www.apache.org/licenses/LICENSE-2.0
  * Text Domain:       mcp
