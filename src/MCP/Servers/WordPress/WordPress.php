@@ -7,6 +7,7 @@ use Mcp\Types\ResourceTemplate;
 use McpWp\MCP\Server;
 use McpWp\MCP\Servers\WordPress\Tools\CommunityEvents;
 use McpWp\MCP\Servers\WordPress\Tools\Dummy;
+use McpWp\MCP\Servers\WordPress\Tools\ElementorPageFromUrl;
 use McpWp\MCP\Servers\WordPress\Tools\MediaUploadFromUrl;
 use McpWp\MCP\Servers\WordPress\Tools\PluginEditor;
 use McpWp\MCP\Servers\WordPress\Tools\PluginManager;
@@ -24,6 +25,7 @@ class WordPress extends Server {
 			...( new CommunityEvents() )->get_tools(),
 			...( new Dummy() )->get_tools(),
 			...( new MediaUploadFromUrl() )->get_tools(),
+			...( new ElementorPageFromUrl() )->get_tools(),
 			...( new ThemeSwitch() )->get_tools(),
 			...( new ThemeEditor() )->get_tools(),
 			...( new PluginManager() )->get_tools(),
