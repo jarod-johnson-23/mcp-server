@@ -100,6 +100,26 @@ class RestController extends WP_REST_Controller {
 				'schema' => [ $this, 'get_public_item_schema' ],
 			]
 		);
+
+		// Elementor cache refresh endpoint (discovered as an MCP tool via REST discovery).
+		register_rest_route(
+			$this->namespace,
+			'/elementor/refresh',
+			[
+				[
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'refresh_elementor_css' ],
+					'permission_callback' => [ $this, 'refresh_elementor_css_permissions_check' ],
+					'args'                => [
+						'page_id' => [
+							'type'        => 'integer',
+							'description' => __( 'The page or post ID to refresh Elementor CSS cache for.', 'mcp' ),
+							'required'    => true,
+						],
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -549,6 +569,92 @@ class RestController extends WP_REST_Controller {
 					'WWW-Authenticate' => 'Bearer realm="' . get_site_url() . '/wp-json/mcp/v1/mcp"',
 				),
 			)
+		);
+	}
+
+	/**
+	 * Permission check for refreshing Elementor CSS cache.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return true|WP_Error
+	 */
+	public function refresh_elementor_css_permissions_check( $request ): true|WP_Error {
+		// Require authentication
+		$auth_result = $this->authenticate_request( $request );
+		if ( is_wp_error( $auth_result ) ) {
+			return $auth_result;
+		}
+
+		$page_id = (int) ( $request['page_id'] ?? 0 );
+		if ( $page_id <= 0 ) {
+			return new WP_Error(
+				'mcp_invalid_page_id',
+				__( 'Invalid page_id.', 'mcp' ),
+				array( 'status' => WP_Http::BAD_REQUEST )
+			);
+		}
+
+		if ( ! current_user_can( 'edit_post', $page_id ) ) {
+			return new WP_Error(
+				'mcp_forbidden',
+				__( 'You are not allowed to edit this post.', 'mcp' ),
+				array( 'status' => WP_Http::FORBIDDEN )
+			);
+		}
+
+		return true;
+	}
+
+	/**
+	 * Refreshes Elementor CSS cache for a given page/post ID.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function refresh_elementor_css( $request ): WP_Error|WP_REST_Response {
+		$page_id = (int) $request['page_id'];
+
+		if ( ! did_action( 'elementor/loaded' ) ) {
+			return new WP_Error(
+				'elementor_not_loaded',
+				__( 'Elementor is not loaded.', 'mcp' ),
+				array( 'status' => WP_Http::FAILED_DEPENDENCY )
+			);
+		}
+
+		if ( ! class_exists( '\\Elementor\\Plugin' ) ) {
+			return new WP_Error(
+				'elementor_missing',
+				__( 'Elementor Plugin class missing.', 'mcp' ),
+				array( 'status' => WP_Http::FAILED_DEPENDENCY )
+			);
+		}
+
+		$elementor = \Elementor\Plugin::instance();
+		$css_file  = $elementor->files_manager->get_css_file(
+			[
+				'post_id' => $page_id,
+			]
+		);
+
+		if ( ! $css_file ) {
+			return new WP_Error(
+				'elementor_css_not_found',
+				__( 'No CSS file found for this post.', 'mcp' ),
+				array( 'status' => WP_Http::NOT_FOUND )
+			);
+		}
+
+		// Clear cached CSS and regenerate.
+		$css_file->clear_cache();
+		$css_file->update();
+
+		return new WP_REST_Response(
+			[
+				'success' => true,
+				'page_id' => $page_id,
+				'message' => __( 'Elementor CSS cache cleared and regenerated.', 'mcp' ),
+			]
 		);
 	}
 }
