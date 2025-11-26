@@ -20,20 +20,15 @@ readonly class ElementorCacheRefresh {
 	public function get_tools(): array {
 		return [
 			[
-				'name'        => 'refresh_elementor_page_cache',
-				'description' => 'Refresh Elementor page cache (CSS) for a given page/post ID.',
+				'name'        => 'refresh_elementor_cache',
+				'description' => 'Refresh Elementor global cache (CSS/HTML/JS assets) for the site.',
 				'inputSchema' => [
 					'type'       => 'object',
-					'properties' => [
-						'page_id' => [
-							'type'        => 'integer',
-							'description' => 'The page or post ID to refresh Elementor cache for.',
-						],
-					],
-					'required'   => [ 'page_id' ],
+					'properties' => [],
+					'required'   => [],
 				],
 				'annotations' => [
-					'title'           => 'Refresh Elementor Page Cache',
+					'title'           => 'Refresh Elementor Cache',
 					'readOnlyHint'    => false,
 					'idempotentHint'  => false,
 					'destructiveHint' => false,
@@ -44,21 +39,12 @@ readonly class ElementorCacheRefresh {
 	}
 
 	/**
-	 * Refresh Elementor cache for a given page/post ID.
+	 * Refresh Elementor global cache.
 	 *
 	 * @param array<string, mixed> $params Tool parameters.
 	 * @return string JSON response.
 	 */
 	public function refresh( array $params ): string {
-		$page_id = isset( $params['page_id'] ) ? (int) $params['page_id'] : 0;
-
-		if ( $page_id <= 0 ) {
-			return json_encode( [
-				'success' => false,
-				'error'   => 'Invalid or missing page_id',
-			] );
-		}
-
 		if ( ! did_action( 'elementor/loaded' ) ) {
 			return json_encode( [
 				'success' => false,
@@ -73,29 +59,21 @@ readonly class ElementorCacheRefresh {
 			] );
 		}
 
-		$elementor = \Elementor\Plugin::instance();
-
-		// Refresh CSS cache for this page.
-		$css_file = $elementor->files_manager->get_css_file(
-			[
-				'post_id' => $page_id,
-			]
-		);
-
-		if ( ! $css_file ) {
-			return json_encode( [
-				'success' => false,
-				'error'   => 'No CSS file found for this post.',
-			] );
+		// Clear global Elementor cache via files manager.
+		if ( class_exists( '\\Elementor\\Plugin' ) ) {
+			$plugin = \Elementor\Plugin::instance();
+			if ( isset( $plugin->files_manager ) && method_exists( $plugin->files_manager, 'clear_cache' ) ) {
+				$plugin->files_manager->clear_cache();
+				return json_encode( [
+					'success' => true,
+					'message' => 'Elementor cache cleared.',
+				] );
+			}
 		}
 
-		$css_file->clear_cache();
-		$css_file->update();
-
 		return json_encode( [
-			'success' => true,
-			'page_id' => $page_id,
-			'message' => 'Elementor CSS cache cleared and regenerated.',
+			'success' => false,
+			'error'   => 'Failed to clear Elementor cache: files manager not available.',
 		] );
 	}
 }
